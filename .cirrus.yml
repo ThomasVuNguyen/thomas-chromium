@@ -39,13 +39,15 @@ windows_build_task:
     memory: 32G
   
   install_deps_script:
-    - choco install -y python3 git
+    - choco install -y python3 git --no-progress
+    - refreshenv
   
   clone_script:
-    - echo "Thomas Chromium Windows build starting..."
-    - python --version
+    - Write-Host "Thomas Chromium Windows build starting..."
+    - Write-Host "Checking installed tools..."
+    - cmd /c "C:\Python312\python.exe --version"
     - git --version
-    - echo "Dependencies installed. Full build would fetch Chromium source here."
+    - Write-Host "Dependencies installed. Full build would fetch Chromium source here."
 
 # ============================================================================
 # macOS Build
