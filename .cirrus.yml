@@ -56,24 +56,41 @@ linux_build_task:
       if [ ! -d "src/.git" ]; then
         echo "Fetching Chromium source for the first time..."
         fetch --nohooks --no-history chromium
-        cd src
-        git checkout $CHROMIUM_VERSION || git checkout main
-        gclient sync --nohooks -D
-      else
-        cd src
-        CURRENT_VERSION=$(git describe --tags --always 2>/dev/null || git rev-parse --short HEAD)
-        echo "Current version: $CURRENT_VERSION"
-        echo "Target version: $CHROMIUM_VERSION"
-        
-        if echo "$CURRENT_VERSION" | grep -q "$CHROMIUM_VERSION"; then
-          echo "✅ Already on correct version, skipping fetch!"
-        else
-          echo "Version mismatch, updating..."
-          git fetch origin || true
-          git checkout $CHROMIUM_VERSION || git checkout main
-          gclient sync --nohooks -D
-        fi
       fi
+    - cd /cache/chromium/src
+    - |
+      # Get current commit
+      CURRENT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "none")
+      echo "Current commit: $CURRENT_COMMIT"
+      echo "Target version: $CHROMIUM_VERSION"
+      
+      # Check if we need to update
+      # Store a marker file with the last successful version
+      if [ -f "/cache/.chromium_version" ] && [ "$(cat /cache/.chromium_version)" = "$CHROMIUM_VERSION" ]; then
+        echo "✅ Already on correct version ($CHROMIUM_VERSION), skipping sync!"
+      else
+        echo "Updating to version $CHROMIUM_VERSION..."
+        
+        # Fetch tags explicitly
+        git fetch --tags origin || true
+        
+        # Try to checkout the version tag
+        if git checkout "$CHROMIUM_VERSION" 2>/dev/null; then
+          echo "Checked out tag $CHROMIUM_VERSION"
+        elif git checkout "tags/$CHROMIUM_VERSION" 2>/dev/null; then
+          echo "Checked out tags/$CHROMIUM_VERSION"  
+        else
+          echo "Tag $CHROMIUM_VERSION not found, staying on current branch"
+        fi
+        
+        # Sync dependencies
+        gclient sync --nohooks -D
+        
+        # Mark version as synced
+        echo "$CHROMIUM_VERSION" > /cache/.chromium_version
+        echo "✅ Sync complete, version marked as $CHROMIUM_VERSION"
+      fi
+
   
   install_build_deps_script:
     - export PATH="/cache/depot_tools:$PATH"
