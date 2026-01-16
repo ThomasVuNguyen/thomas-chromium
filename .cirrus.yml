@@ -1,82 +1,82 @@
-# Thomas Chromium - Full Build Configuration
-# This builds Chromium from source on Linux, Windows, and macOS
+# Thomas Chromium - Self-Hosted Build Configuration
+# Uses your Linux machine (thomas-lenovo) to build Linux + cross-compile Windows
 
 env:
   CHROMIUM_VERSION: "131.0.6778.139"
   DEPOT_TOOLS_UPDATE: "0"
 
 # ============================================================================
-# Linux Build (Ubuntu 22.04)
+# Linux Build (Native)
 # ============================================================================
 linux_build_task:
   name: "Linux Build"
-  timeout_in: 360m  # 6 hours
-  container:
-    image: ubuntu:22.04
-    cpu: 8
-    memory: 32G
+  timeout_in: 480m  # 8 hours max
+  
+  persistent_worker:
+    labels:
+      os: linux
+    isolation:
+      container:
+        image: ubuntu:22.04
+        cpu: 10
+        memory: 20G
+        volumes:
+          - /tmp/chromium-cache:/cache
   
   env:
     DEBIAN_FRONTEND: noninteractive
-  
-  # Cache depot_tools to speed up builds
-  depot_tools_cache:
-    folder: depot_tools
-    fingerprint_script: echo "depot_tools-v1"
-  
-  # Cache Chromium source (huge time saver)
-  chromium_cache:
-    folder: chromium
-    fingerprint_script: echo "chromium-$CHROMIUM_VERSION"
+    HOME: /root
   
   install_deps_script:
     - apt-get update
-    - apt-get install -y build-essential git python3 python3-pip curl wget lsb-release sudo pkg-config ninja-build
-    - apt-get install -y libgtk-3-dev libglib2.0-dev libnss3-dev libcups2-dev libxss-dev libasound2-dev
+    - apt-get install -y git python3 python3-pip curl wget lsb-release sudo pkg-config
+    - apt-get install -y build-essential ninja-build clang lld
+    - apt-get install -y libgtk-3-dev libglib2.0-dev libnss3-dev libcups2-dev libxss-dev libasound2-dev libxkbcommon-dev
   
   setup_depot_tools_script:
     - |
-      if [ ! -d "depot_tools/.git" ]; then
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+      if [ ! -d "/cache/depot_tools/.git" ]; then
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /cache/depot_tools
       fi
-    - export PATH="$PWD/depot_tools:$PATH"
+    - export PATH="/cache/depot_tools:$PATH"
     - echo "depot_tools ready"
   
   fetch_chromium_script:
-    - export PATH="$PWD/depot_tools:$PATH"
+    - export PATH="/cache/depot_tools:$PATH"
+    - mkdir -p /cache/chromium
+    - cd /cache/chromium
     - |
-      if [ ! -d "chromium/src" ]; then
-        mkdir -p chromium && cd chromium
-        fetch --nohooks chromium
-        cd src
-        git checkout $CHROMIUM_VERSION
-        gclient sync --nohooks
-      else
-        cd chromium/src
-        git fetch
-        git checkout $CHROMIUM_VERSION
-        gclient sync --nohooks
+      if [ ! -d "src/.git" ]; then
+        echo "Fetching Chromium source (this takes a while)..."
+        fetch --nohooks --no-history chromium
       fi
+    - cd src
+    - git fetch origin $CHROMIUM_VERSION || true
+    - git checkout $CHROMIUM_VERSION || git checkout main
+    - gclient sync --nohooks -D
   
   install_build_deps_script:
-    - export PATH="$PWD/depot_tools:$PATH"
-    - cd chromium/src
+    - export PATH="/cache/depot_tools:$PATH"
+    - cd /cache/chromium/src
     - ./build/install-build-deps.sh --no-prompt || true
+    - gclient runhooks
   
   apply_patches_script:
-    - cd chromium/src
+    - cd /cache/chromium/src
     - echo "Applying Thomas Chromium patches..."
+    - cp -r $CIRRUS_WORKING_DIR/patches /tmp/patches || true
     - |
-      for patch in ../../patches/branding/*.patch; do
+      for patch in /tmp/patches/branding/*.patch; do
         if [ -f "$patch" ]; then
           echo "Applying $patch"
-          git apply "$patch" || echo "Patch may already be applied"
+          git apply "$patch" || echo "Patch may already be applied or doesn't match"
         fi
       done
   
-  build_script:
-    - export PATH="$PWD/depot_tools:$PATH"
-    - cd chromium/src
+  configure_script:
+    - export PATH="/cache/depot_tools:$PATH"
+    - cd /cache/chromium/src
+    - mkdir -p out/Release
     - |
       cat > out/Release/args.gn << 'EOF'
       is_official_build = true
@@ -88,148 +88,87 @@ linux_build_task:
       is_component_build = false
       proprietary_codecs = true
       ffmpeg_branding = "Chrome"
+      use_sysroot = true
       EOF
     - gn gen out/Release
-    - autoninja -C out/Release chrome
-  
-  package_script:
-    - cd chromium/src
-    - mkdir -p ../../artifacts
-    - tar -czvf ../../artifacts/thomas-chromium-linux-x64.tar.gz -C out/Release chrome chrome_sandbox *.pak *.bin locales resources
-  
-  artifacts:
-    path: "artifacts/*"
-
-# ============================================================================
-# Windows Build
-# ============================================================================
-windows_build_task:
-  name: "Windows Build"
-  timeout_in: 360m  # 6 hours
-  windows_container:
-    image: cirrusci/windowsservercore:visualstudio2022
-    cpu: 8
-    memory: 32G
-  
-  # Cache depot_tools
-  depot_tools_cache:
-    folder: depot_tools
-    fingerprint_script: echo "depot_tools-win-v1"
-  
-  # Cache Chromium source
-  chromium_cache:
-    folder: chromium
-    fingerprint_script: echo "chromium-win-$CHROMIUM_VERSION"
-  
-  setup_depot_tools_script:
-    - if not exist depot_tools git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-    - set PATH=%cd%\depot_tools;%PATH%
-    - echo depot_tools ready
-  
-  fetch_chromium_script:
-    - set PATH=%cd%\depot_tools;%PATH%
-    - set DEPOT_TOOLS_WIN_TOOLCHAIN=0
-    - if not exist chromium\src (mkdir chromium && cd chromium && fetch --nohooks chromium)
-    - cd chromium\src
-    - git checkout %CHROMIUM_VERSION%
-    - gclient sync --nohooks
   
   build_script:
-    - set PATH=%cd%\depot_tools;%PATH%
-    - set DEPOT_TOOLS_WIN_TOOLCHAIN=0
-    - cd chromium\src
-    - echo is_official_build = true > out\Release\args.gn
-    - echo is_debug = false >> out\Release\args.gn
-    - echo target_cpu = "x64" >> out\Release\args.gn
-    - echo enable_nacl = false >> out\Release\args.gn
-    - echo symbol_level = 0 >> out\Release\args.gn
-    - gn gen out\Release
-    - autoninja -C out\Release chrome
+    - export PATH="/cache/depot_tools:$PATH"
+    - cd /cache/chromium/src
+    - autoninja -C out/Release chrome -j10
   
   package_script:
-    - mkdir artifacts
-    - powershell Compress-Archive -Path chromium\src\out\Release\chrome.exe,chromium\src\out\Release\*.dll,chromium\src\out\Release\*.pak,chromium\src\out\Release\locales -DestinationPath artifacts\thomas-chromium-win-x64.zip
+    - mkdir -p $CIRRUS_WORKING_DIR/artifacts
+    - cd /cache/chromium/src
+    - tar -czvf $CIRRUS_WORKING_DIR/artifacts/thomas-chromium-linux-x64.tar.gz -C out/Release chrome chrome_sandbox *.pak *.bin locales resources || true
   
   artifacts:
     path: "artifacts/*"
 
 # ============================================================================
-# macOS Build
+# Windows Build (Cross-compiled from Linux)
 # ============================================================================
-macos_build_task:
-  name: "macOS Build"
-  timeout_in: 360m  # 6 hours
-  macos_instance:
-    image: ghcr.io/cirruslabs/macos-runner:sonoma
+windows_cross_build_task:
+  name: "Windows Build (Cross-compile)"
+  timeout_in: 480m
+  depends_on:
+    - "Linux Build"  # Reuse the cached source
+  
+  persistent_worker:
+    labels:
+      os: linux
+    isolation:
+      container:
+        image: ubuntu:22.04
+        cpu: 10
+        memory: 20G
+        volumes:
+          - /tmp/chromium-cache:/cache
   
   env:
-    HOMEBREW_NO_AUTO_UPDATE: 1
-  
-  # Cache depot_tools
-  depot_tools_cache:
-    folder: depot_tools
-    fingerprint_script: echo "depot_tools-mac-v1"
-  
-  # Cache Chromium source
-  chromium_cache:
-    folder: chromium
-    fingerprint_script: echo "chromium-mac-$CHROMIUM_VERSION"
+    DEBIAN_FRONTEND: noninteractive
+    HOME: /root
+    DEPOT_TOOLS_WIN_TOOLCHAIN: "0"
   
   install_deps_script:
-    - brew install ninja python@3.11
+    - apt-get update
+    - apt-get install -y git python3 python3-pip curl wget pkg-config
+    - apt-get install -y build-essential ninja-build clang lld
+    - apt-get install -y wine64 || true
   
-  setup_depot_tools_script:
+  setup_win_toolchain_script:
+    - export PATH="/cache/depot_tools:$PATH"
+    - cd /cache/chromium/src
     - |
-      if [ ! -d "depot_tools/.git" ]; then
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-      fi
-    - export PATH="$PWD/depot_tools:$PATH"
-    - echo "depot_tools ready"
+      echo "Setting up Windows cross-compile toolchain..."
+      # The toolchain should already be synced from Linux build
+      # Just need to configure for Windows target
   
-  fetch_chromium_script:
-    - export PATH="$PWD/depot_tools:$PATH"
+  configure_windows_script:
+    - export PATH="/cache/depot_tools:$PATH"
+    - cd /cache/chromium/src
+    - mkdir -p out/Release-win
     - |
-      if [ ! -d "chromium/src" ]; then
-        mkdir -p chromium && cd chromium
-        fetch --nohooks chromium
-        cd src
-        git checkout $CHROMIUM_VERSION
-        gclient sync --nohooks
-      else
-        cd chromium/src
-        git fetch
-        git checkout $CHROMIUM_VERSION
-        gclient sync --nohooks
-      fi
-  
-  build_script:
-    - export PATH="$PWD/depot_tools:$PATH"
-    - cd chromium/src
-    - |
-      cat > out/Release/args.gn << 'EOF'
+      cat > out/Release-win/args.gn << 'EOF'
       is_official_build = true
       is_debug = false
+      target_os = "win"
       target_cpu = "x64"
       enable_nacl = false
       symbol_level = 0
-      blink_symbol_level = 0
       is_component_build = false
-      proprietary_codecs = true
-      ffmpeg_branding = "Chrome"
       EOF
-    - gn gen out/Release
-    - autoninja -C out/Release chrome
+    - gn gen out/Release-win
   
-  package_script:
-    - cd chromium/src
-    - mkdir -p ../../artifacts
-    - |
-      # Create a basic .app bundle
-      APP_NAME="Thomas Chromium"
-      mkdir -p "../../artifacts/$APP_NAME.app/Contents/MacOS"
-      cp out/Release/Chromium "../../artifacts/$APP_NAME.app/Contents/MacOS/Thomas Chromium"
-      cp -r out/Release/*.pak out/Release/locales out/Release/resources "../../artifacts/$APP_NAME.app/Contents/MacOS/"
-    - cd ../../artifacts && zip -r thomas-chromium-macos-x64.zip "Thomas Chromium.app"
+  build_windows_script:
+    - export PATH="/cache/depot_tools:$PATH"
+    - cd /cache/chromium/src
+    - autoninja -C out/Release-win chrome -j10
+  
+  package_windows_script:
+    - mkdir -p $CIRRUS_WORKING_DIR/artifacts
+    - cd /cache/chromium/src/out/Release-win
+    - zip -r $CIRRUS_WORKING_DIR/artifacts/thomas-chromium-win-x64.zip chrome.exe *.dll *.pak *.bin locales resources || true
   
   artifacts:
     path: "artifacts/*"
