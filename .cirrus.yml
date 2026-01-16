@@ -41,29 +41,56 @@ linux_build_task:
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /cache/depot_tools
       fi
     - cd /cache/depot_tools
-    - echo "Bootstrapping depot_tools..."
-    - ./update_depot_tools || true
-    - echo "depot_tools ready at /cache/depot_tools"
+    - |
+      # Only update depot_tools if it hasn't been updated in the last 24 hours
+      if [ ! -f "/cache/depot_tools/.last_update" ] || [ $(find /cache/depot_tools/.last_update -mmin +1440 2>/dev/null) ]; then
+        echo "Updating depot_tools..."
+        ./update_depot_tools || true
+        touch /cache/depot_tools/.last_update
+      else
+        echo "depot_tools is up to date (updated within 24h)"
+      fi
   
   fetch_chromium_script:
     - mkdir -p /cache/chromium
     - cd /cache/chromium
     - |
+      # Check if Chromium source exists
       if [ ! -d "src/.git" ]; then
-        echo "Fetching Chromium source (this takes a while)..."
+        echo "Fetching Chromium source for the first time..."
         fetch --nohooks --no-history chromium
+        cd src
+        git checkout $CHROMIUM_VERSION || git checkout main
+        gclient sync --nohooks -D
       else
-        echo "Chromium source already exists, updating..."
+        cd src
+        # Check current version
+        CURRENT_VERSION=$(git describe --tags --always 2>/dev/null || git rev-parse HEAD)
+        echo "Current version: $CURRENT_VERSION"
+        echo "Target version: $CHROMIUM_VERSION"
+        
+        # Only sync if version doesn't match
+        if echo "$CURRENT_VERSION" | grep -q "$CHROMIUM_VERSION"; then
+          echo "✅ Already on correct version, skipping fetch!"
+        else
+          echo "Version mismatch, updating..."
+          git fetch origin || true
+          git checkout $CHROMIUM_VERSION || git checkout main
+          gclient sync --nohooks -D
+        fi
       fi
-    - cd src
-    - git fetch origin || true
-    - git checkout $CHROMIUM_VERSION || git checkout main || true
-    - gclient sync --nohooks -D
   
   install_build_deps_script:
     - cd /cache/chromium/src
-    - echo "Installing Chromium build dependencies..."
-    - ./build/install-build-deps.sh --no-prompt || true
+    - |
+      # Only run install-build-deps if not already done
+      if [ ! -f "/cache/.build_deps_installed" ]; then
+        echo "Installing Chromium build dependencies..."
+        ./build/install-build-deps.sh --no-prompt || true
+        touch /cache/.build_deps_installed
+      else
+        echo "✅ Build dependencies already installed, skipping!"
+      fi
     - echo "Running gclient runhooks..."
     - gclient runhooks
   
@@ -75,7 +102,7 @@ linux_build_task:
       for patch in /tmp/patches/branding/*.patch; do
         if [ -f "$patch" ]; then
           echo "Applying $patch"
-          git apply "$patch" || echo "Patch may already be applied or doesn't match"
+          git apply "$patch" 2>/dev/null || echo "Patch already applied or doesn't match"
         fi
       done
   
@@ -139,9 +166,8 @@ windows_cross_build_task:
   
   install_deps_script:
     - apt-get update
-    - apt-get install -y git python3 python3-pip curl wget pkg-config file
+    - apt-get install -y git python3 python3-pip curl wget pkg-config file zip
     - apt-get install -y build-essential ninja-build clang lld
-    - apt-get install -y wine64 || true
   
   configure_windows_script:
     - cd /cache/chromium/src
@@ -165,7 +191,6 @@ windows_cross_build_task:
   package_windows_script:
     - mkdir -p $CIRRUS_WORKING_DIR/artifacts
     - cd /cache/chromium/src/out/Release-win
-    - apt-get install -y zip
     - zip -r $CIRRUS_WORKING_DIR/artifacts/thomas-chromium-win-x64.zip chrome.exe *.dll *.pak *.bin locales resources || true
   
   artifacts:
