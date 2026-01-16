@@ -1,6 +1,6 @@
 # Thomas Chromium
 
-A privacy-focused, customizable Chromium-based browser.
+[![Build Status](https://api.cirrus-ci.com/github/ThomasVuNguyen/thomas-chromium.svg)](https://cirrus-ci.com/github/ThomasVuNguyen/thomas-chromium)
 
 ## Features
 
