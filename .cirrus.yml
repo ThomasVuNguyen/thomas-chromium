@@ -23,7 +23,7 @@ linux_build_task:
   
   clone_script:
     - echo "Thomas Chromium Linux build starting..."
-    - echo "Chromium version:" $CHROMIUM_VERSION
+    - echo "Chromium version - $CHROMIUM_VERSION"
     - python3 --version
     - git --version
     - echo "Dependencies installed. Full build would fetch Chromium source here."
@@ -42,11 +42,10 @@ windows_build_task:
     - choco install -y python3 git
   
   clone_script:
-    - echo Thomas Chromium Windows build starting...
-    - echo Chromium version: %CHROMIUM_VERSION%
+    - echo "Thomas Chromium Windows build starting..."
     - python --version
     - git --version
-    - echo Dependencies installed. Full build would fetch Chromium source here.
+    - echo "Dependencies installed. Full build would fetch Chromium source here."
 
 # ============================================================================
 # macOS Build
@@ -64,7 +63,7 @@ macos_build_task:
   
   clone_script:
     - echo "Thomas Chromium macOS build starting..."
-    - echo "Chromium version:" $CHROMIUM_VERSION
+    - echo "Chromium version - $CHROMIUM_VERSION"
     - python3 --version
     - git --version
     - echo "Dependencies installed. Full build would fetch Chromium source here."
