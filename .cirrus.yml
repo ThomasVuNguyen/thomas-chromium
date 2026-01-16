@@ -1,0 +1,104 @@
+# Cirrus CI configuration for Thomas Chromium
+# Builds for Linux, Windows, and macOS
+
+env:
+  CHROMIUM_VERSION: "131.0.6778.139"  # Update to desired version
+
+# ============================================================================
+# Linux Build
+# ============================================================================
+linux_build_task:
+  name: "Linux Build"
+  container:
+    dockerfile: .ci/linux/Dockerfile
+    cpu: 8
+    memory: 32G
+  
+  env:
+    DEBIAN_FRONTEND: noninteractive
+  
+  # Cache depot_tools and Chromium source
+  depot_tools_cache:
+    folder: depot_tools
+    fingerprint_script: echo $CHROMIUM_VERSION
+  
+  chromium_cache:
+    folder: src
+    fingerprint_script: echo $CHROMIUM_VERSION-linux
+  
+  setup_script:
+    - ./scripts/setup.sh linux
+  
+  build_script:
+    - ./scripts/build.sh linux
+  
+  package_script:
+    - ./scripts/package.sh linux
+  
+  binaries_artifacts:
+    path: "out/*.tar.gz"
+
+# ============================================================================
+# Windows Build  
+# ============================================================================
+windows_build_task:
+  name: "Windows Build"
+  windows_container:
+    dockerfile: .ci/windows/Dockerfile
+    cpu: 8
+    memory: 32G
+  
+  depot_tools_cache:
+    folder: depot_tools
+    fingerprint_script: echo $CHROMIUM_VERSION
+  
+  chromium_cache:
+    folder: src
+    fingerprint_script: echo $CHROMIUM_VERSION-windows
+  
+  setup_script:
+    - scripts\setup.bat
+  
+  build_script:
+    - scripts\build.bat
+  
+  package_script:
+    - scripts\package.bat
+  
+  binaries_artifacts:
+    path: "out/*.exe"
+    path: "out/*.zip"
+
+# ============================================================================
+# macOS Build
+# ============================================================================
+macos_build_task:
+  name: "macOS Build"
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-sonoma-xcode:latest
+  
+  env:
+    HOMEBREW_NO_AUTO_UPDATE: 1
+  
+  depot_tools_cache:
+    folder: depot_tools
+    fingerprint_script: echo $CHROMIUM_VERSION
+  
+  chromium_cache:
+    folder: src
+    fingerprint_script: echo $CHROMIUM_VERSION-macos
+  
+  install_deps_script:
+    - brew install ninja
+  
+  setup_script:
+    - ./scripts/setup.sh macos
+  
+  build_script:
+    - ./scripts/build.sh macos
+  
+  package_script:
+    - ./scripts/package.sh macos
+  
+  binaries_artifacts:
+    path: "out/*.dmg"

@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+depot_tools/
+src/
+
+# Build outputs
+out/
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.AppImage
+*.tar.gz
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Generated files
+.gclient_entries
+.gclient

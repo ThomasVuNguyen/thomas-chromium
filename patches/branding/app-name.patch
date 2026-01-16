@@ -1,0 +1,22 @@
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
+   <outputs>
+-    <output filename="grit/chromium_strings.h" type="rc_header">
++    <output filename="grit/thomas_chromium_strings.h" type="rc_header">
+       <emit emit_type='prepend'></emit>
+     </output>
+   </outputs>
+@@ -10,7 +10,7 @@
+     <message name="IDS_PRODUCT_NAME" desc="The Chrome product name">
+-      Chromium
++      Thomas Chromium
+     </message>
+     <message name="IDS_SHORT_PRODUCT_NAME" desc="Short Chrome product name">
+-      Chromium
++      Thomas
+     </message>
+   </messages>
+ </grit>

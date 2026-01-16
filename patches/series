@@ -1,0 +1,17 @@
+# Patch series file
+# Patches are applied in order, one per line
+# Lines starting with # are comments
+
+# Branding
+branding/app-name.patch
+branding/about-page.patch
+
+# Privacy enhancements
+# privacy/disable-telemetry.patch
+# privacy/remove-google-services.patch
+
+# UI customizations
+# ui/custom-newtab.patch
+
+# Features
+# features/builtin-adblock.patch

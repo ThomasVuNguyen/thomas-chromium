@@ -1,0 +1,13 @@
+--- a/chrome/browser/ui/webui/settings/about_handler.cc
++++ b/chrome/browser/ui/webui/settings/about_handler.cc
+@@ -100,7 +100,7 @@
+ void AboutHandler::HandleGetAboutInfo(const base::Value::List& args) {
+   base::Value::Dict info;
+-  info.Set("productName", "Chromium");
++  info.Set("productName", "Thomas Chromium");
+   info.Set("version", version_info::GetVersionNumber());
+-  info.Set("productUrl", "https://www.chromium.org/");
++  info.Set("productUrl", "https://github.com/user/thomas-chromium");
+   
+   ResolveJavascriptCallback(args[0], info);
+ }
