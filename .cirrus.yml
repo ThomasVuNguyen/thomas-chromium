@@ -26,39 +26,45 @@ linux_build_task:
   env:
     DEBIAN_FRONTEND: noninteractive
     HOME: /root
+    PATH: /cache/depot_tools:$PATH
   
   install_deps_script:
     - apt-get update
-    - apt-get install -y git python3 python3-pip curl wget lsb-release sudo pkg-config
+    - apt-get install -y git python3 python3-pip curl wget lsb-release sudo pkg-config file
     - apt-get install -y build-essential ninja-build clang lld
     - apt-get install -y libgtk-3-dev libglib2.0-dev libnss3-dev libcups2-dev libxss-dev libasound2-dev libxkbcommon-dev
   
   setup_depot_tools_script:
     - |
       if [ ! -d "/cache/depot_tools/.git" ]; then
+        echo "Cloning depot_tools..."
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /cache/depot_tools
       fi
-    - export PATH="/cache/depot_tools:$PATH"
-    - echo "depot_tools ready"
+    - cd /cache/depot_tools
+    - echo "Bootstrapping depot_tools..."
+    - ./update_depot_tools || true
+    - echo "depot_tools ready at /cache/depot_tools"
   
   fetch_chromium_script:
-    - export PATH="/cache/depot_tools:$PATH"
     - mkdir -p /cache/chromium
     - cd /cache/chromium
     - |
       if [ ! -d "src/.git" ]; then
         echo "Fetching Chromium source (this takes a while)..."
         fetch --nohooks --no-history chromium
+      else
+        echo "Chromium source already exists, updating..."
       fi
     - cd src
-    - git fetch origin $CHROMIUM_VERSION || true
-    - git checkout $CHROMIUM_VERSION || git checkout main
+    - git fetch origin || true
+    - git checkout $CHROMIUM_VERSION || git checkout main || true
     - gclient sync --nohooks -D
   
   install_build_deps_script:
-    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
+    - echo "Installing Chromium build dependencies..."
     - ./build/install-build-deps.sh --no-prompt || true
+    - echo "Running gclient runhooks..."
     - gclient runhooks
   
   apply_patches_script:
@@ -74,7 +80,6 @@ linux_build_task:
       done
   
   configure_script:
-    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
     - mkdir -p out/Release
     - |
@@ -90,11 +95,12 @@ linux_build_task:
       ffmpeg_branding = "Chrome"
       use_sysroot = true
       EOF
+    - echo "Running gn gen..."
     - gn gen out/Release
   
   build_script:
-    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
+    - echo "Starting Chromium build with 10 parallel jobs..."
     - autoninja -C out/Release chrome -j10
   
   package_script:
@@ -128,24 +134,16 @@ windows_cross_build_task:
   env:
     DEBIAN_FRONTEND: noninteractive
     HOME: /root
+    PATH: /cache/depot_tools:$PATH
     DEPOT_TOOLS_WIN_TOOLCHAIN: "0"
   
   install_deps_script:
     - apt-get update
-    - apt-get install -y git python3 python3-pip curl wget pkg-config
+    - apt-get install -y git python3 python3-pip curl wget pkg-config file
     - apt-get install -y build-essential ninja-build clang lld
     - apt-get install -y wine64 || true
   
-  setup_win_toolchain_script:
-    - export PATH="/cache/depot_tools:$PATH"
-    - cd /cache/chromium/src
-    - |
-      echo "Setting up Windows cross-compile toolchain..."
-      # The toolchain should already be synced from Linux build
-      # Just need to configure for Windows target
-  
   configure_windows_script:
-    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
     - mkdir -p out/Release-win
     - |
@@ -161,13 +159,13 @@ windows_cross_build_task:
     - gn gen out/Release-win
   
   build_windows_script:
-    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
     - autoninja -C out/Release-win chrome -j10
   
   package_windows_script:
     - mkdir -p $CIRRUS_WORKING_DIR/artifacts
     - cd /cache/chromium/src/out/Release-win
+    - apt-get install -y zip
     - zip -r $CIRRUS_WORKING_DIR/artifacts/thomas-chromium-win-x64.zip chrome.exe *.dll *.pak *.bin locales resources || true
   
   artifacts:
