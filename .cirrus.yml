@@ -120,10 +120,6 @@ linux_build_task:
   
   configure_script:
     - export PATH="/cache/depot_tools:$PATH"
-    - |
-      # Ensure depot_tools is bootstrapped before using gn
-      cd /cache/depot_tools
-      ./cipd --version 2>/dev/null || ./ensure_bootstrap || true
     - cd /cache/chromium/src
     - mkdir -p out/Release
     - |
@@ -140,13 +136,35 @@ linux_build_task:
       use_sysroot = true
       EOF
     - echo "Running gn gen..."
-    - /cache/depot_tools/gn gen out/Release
+    - |
+      # Use Chromium's bundled gn binary instead of depot_tools wrapper
+      if [ -f "buildtools/linux64/gn" ]; then
+        echo "Using Chromium's bundled gn"
+        ./buildtools/linux64/gn gen out/Release
+      elif [ -f "third_party/gn/gn" ]; then
+        echo "Using third_party gn"
+        ./third_party/gn/gn gen out/Release
+      else
+        echo "Falling back to depot_tools gn"
+        gn gen out/Release
+      fi
   
   build_script:
     - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
     - echo "Starting Chromium build with 10 parallel jobs..."
-    - /cache/depot_tools/autoninja -C out/Release chrome -j10
+    - |
+      # Use ninja directly instead of autoninja wrapper
+      if [ -f "third_party/ninja/ninja" ]; then
+        echo "Using Chromium's bundled ninja"
+        ./third_party/ninja/ninja -C out/Release chrome -j10
+      elif command -v ninja &> /dev/null; then
+        echo "Using system ninja"
+        ninja -C out/Release chrome -j10
+      else
+        echo "Using autoninja"
+        autoninja -C out/Release chrome -j10
+      fi
   
   package_script:
     - mkdir -p $CIRRUS_WORKING_DIR/artifacts
@@ -155,6 +173,7 @@ linux_build_task:
   
   artifacts:
     path: "artifacts/*"
+
 
 # ============================================================================
 # Windows Build (Cross-compiled from Linux)
@@ -200,12 +219,25 @@ windows_cross_build_task:
       symbol_level = 0
       is_component_build = false
       EOF
-    - /cache/depot_tools/gn gen out/Release-win
+    - |
+      # Use Chromium's bundled gn
+      cd /cache/chromium/src
+      if [ -f "buildtools/linux64/gn" ]; then
+        ./buildtools/linux64/gn gen out/Release-win
+      else
+        gn gen out/Release-win
+      fi
   
   build_windows_script:
     - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
-    - /cache/depot_tools/autoninja -C out/Release-win chrome -j10
+    - |
+      # Use ninja directly
+      if [ -f "third_party/ninja/ninja" ]; then
+        ./third_party/ninja/ninja -C out/Release-win chrome -j10
+      else
+        ninja -C out/Release-win chrome -j10
+      fi
   
   package_windows_script:
     - mkdir -p $CIRRUS_WORKING_DIR/artifacts
