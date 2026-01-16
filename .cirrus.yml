@@ -134,6 +134,7 @@ linux_build_task:
       proprietary_codecs = true
       ffmpeg_branding = "Chrome"
       use_sysroot = true
+      chrome_pgo_phase = 0
       EOF
     - echo "Running gn gen..."
     - |
@@ -218,6 +219,7 @@ windows_cross_build_task:
       enable_nacl = false
       symbol_level = 0
       is_component_build = false
+      chrome_pgo_phase = 0
       EOF
     - |
       # Use Chromium's bundled gn
