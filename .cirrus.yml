@@ -43,11 +43,10 @@ windows_build_task:
     - refreshenv
   
   clone_script:
-    - Write-Host "Thomas Chromium Windows build starting..."
-    - Write-Host "Checking installed tools..."
-    - cmd /c "C:\Python312\python.exe --version"
+    - echo Thomas Chromium Windows build starting...
+    - echo Checking installed tools...
     - git --version
-    - Write-Host "Dependencies installed. Full build would fetch Chromium source here."
+    - echo Dependencies installed. Full build would fetch Chromium source here.
 
 # ============================================================================
 # macOS Build
