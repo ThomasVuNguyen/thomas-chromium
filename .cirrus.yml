@@ -26,11 +26,10 @@ linux_build_task:
   env:
     DEBIAN_FRONTEND: noninteractive
     HOME: /root
-    PATH: /cache/depot_tools:$PATH
   
   install_deps_script:
     - apt-get update
-    - apt-get install -y git python3 python3-pip curl wget lsb-release sudo pkg-config file
+    - apt-get install -y git python3 python3-pip curl wget lsb-release sudo pkg-config file xz-utils
     - apt-get install -y build-essential ninja-build clang lld
     - apt-get install -y libgtk-3-dev libglib2.0-dev libnss3-dev libcups2-dev libxss-dev libasound2-dev libxkbcommon-dev
   
@@ -40,22 +39,20 @@ linux_build_task:
         echo "Cloning depot_tools..."
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /cache/depot_tools
       fi
+    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/depot_tools
     - |
-      # Only update depot_tools if it hasn't been updated in the last 24 hours
-      if [ ! -f "/cache/depot_tools/.last_update" ] || [ $(find /cache/depot_tools/.last_update -mmin +1440 2>/dev/null) ]; then
-        echo "Updating depot_tools..."
-        ./update_depot_tools || true
-        touch /cache/depot_tools/.last_update
-      else
-        echo "depot_tools is up to date (updated within 24h)"
-      fi
+      # Bootstrap depot_tools - this creates the python3_bin_reldir.txt
+      echo "Bootstrapping depot_tools..."
+      python3 -c "import sys; print(sys.version)"
+      ./cipd --version || ./ensure_bootstrap
+      echo "depot_tools ready"
   
   fetch_chromium_script:
+    - export PATH="/cache/depot_tools:$PATH"
     - mkdir -p /cache/chromium
     - cd /cache/chromium
     - |
-      # Check if Chromium source exists
       if [ ! -d "src/.git" ]; then
         echo "Fetching Chromium source for the first time..."
         fetch --nohooks --no-history chromium
@@ -64,12 +61,10 @@ linux_build_task:
         gclient sync --nohooks -D
       else
         cd src
-        # Check current version
-        CURRENT_VERSION=$(git describe --tags --always 2>/dev/null || git rev-parse HEAD)
+        CURRENT_VERSION=$(git describe --tags --always 2>/dev/null || git rev-parse --short HEAD)
         echo "Current version: $CURRENT_VERSION"
         echo "Target version: $CHROMIUM_VERSION"
         
-        # Only sync if version doesn't match
         if echo "$CURRENT_VERSION" | grep -q "$CHROMIUM_VERSION"; then
           echo "✅ Already on correct version, skipping fetch!"
         else
@@ -81,9 +76,9 @@ linux_build_task:
       fi
   
   install_build_deps_script:
+    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
     - |
-      # Only run install-build-deps if not already done
       if [ ! -f "/cache/.build_deps_installed" ]; then
         echo "Installing Chromium build dependencies..."
         ./build/install-build-deps.sh --no-prompt || true
@@ -107,6 +102,11 @@ linux_build_task:
       done
   
   configure_script:
+    - export PATH="/cache/depot_tools:$PATH"
+    - |
+      # Ensure depot_tools is bootstrapped before using gn
+      cd /cache/depot_tools
+      ./cipd --version 2>/dev/null || ./ensure_bootstrap || true
     - cd /cache/chromium/src
     - mkdir -p out/Release
     - |
@@ -123,12 +123,13 @@ linux_build_task:
       use_sysroot = true
       EOF
     - echo "Running gn gen..."
-    - gn gen out/Release
+    - /cache/depot_tools/gn gen out/Release
   
   build_script:
+    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
     - echo "Starting Chromium build with 10 parallel jobs..."
-    - autoninja -C out/Release chrome -j10
+    - /cache/depot_tools/autoninja -C out/Release chrome -j10
   
   package_script:
     - mkdir -p $CIRRUS_WORKING_DIR/artifacts
@@ -145,7 +146,7 @@ windows_cross_build_task:
   name: "Windows Build (Cross-compile)"
   timeout_in: 480m
   depends_on:
-    - "Linux Build"  # Reuse the cached source
+    - "Linux Build"
   
   persistent_worker:
     labels:
@@ -161,15 +162,15 @@ windows_cross_build_task:
   env:
     DEBIAN_FRONTEND: noninteractive
     HOME: /root
-    PATH: /cache/depot_tools:$PATH
     DEPOT_TOOLS_WIN_TOOLCHAIN: "0"
   
   install_deps_script:
     - apt-get update
-    - apt-get install -y git python3 python3-pip curl wget pkg-config file zip
+    - apt-get install -y git python3 python3-pip curl wget pkg-config file zip xz-utils
     - apt-get install -y build-essential ninja-build clang lld
   
   configure_windows_script:
+    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
     - mkdir -p out/Release-win
     - |
@@ -182,11 +183,12 @@ windows_cross_build_task:
       symbol_level = 0
       is_component_build = false
       EOF
-    - gn gen out/Release-win
+    - /cache/depot_tools/gn gen out/Release-win
   
   build_windows_script:
+    - export PATH="/cache/depot_tools:$PATH"
     - cd /cache/chromium/src
-    - autoninja -C out/Release-win chrome -j10
+    - /cache/depot_tools/autoninja -C out/Release-win chrome -j10
   
   package_windows_script:
     - mkdir -p $CIRRUS_WORKING_DIR/artifacts
