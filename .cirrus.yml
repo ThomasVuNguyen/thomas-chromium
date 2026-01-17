@@ -75,7 +75,14 @@ linux_build_task:
       
       # Check if we need to update
       # Store a marker file with the last successful version
-      if [ -f "/cache/.chromium_version" ] && [ "$(cat /cache/.chromium_version)" = "$CHROMIUM_VERSION" ]; then
+      # Ensure target_os includes win for cross-compile
+      if ! grep -q "target_os = \['linux', 'win'\]" .gclient; then
+         echo "Adding Windows target_os to .gclient..."
+         echo "target_os = ['linux', 'win']" >> .gclient
+         FORCE_SYNC="true"
+      fi
+
+      if [ -f "/cache/.chromium_version" ] && [ "$(cat /cache/.chromium_version)" = "$CHROMIUM_VERSION" ] && [ "$FORCE_SYNC" != "true" ]; then
         echo "✅ Already on correct version ($CHROMIUM_VERSION), skipping sync!"
       else
         echo "Updating to version $CHROMIUM_VERSION..."
